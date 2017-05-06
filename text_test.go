@@ -66,51 +66,69 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 		t.Errorf("schema: %s; Datum: %#v; Actual: %v; Expected: %v", schema, datum, actual, expected)
 	}
 
-	var datumNonNumerical bool
+	var datumIsNumerical, datumIsString bool
 	var datumFloat float64
+	var datumString string
 	switch v := datum.(type) {
 	case float64:
 		datumFloat = v
+		datumIsNumerical = true
 	case float32:
 		datumFloat = float64(v)
+		datumIsNumerical = true
 	case int:
 		datumFloat = float64(v)
+		datumIsNumerical = true
 	case int32:
 		datumFloat = float64(v)
+		datumIsNumerical = true
 	case int64:
 		datumFloat = float64(v)
-	default:
-		datumNonNumerical = true
+		datumIsNumerical = true
+	case string:
+		datumString = v
+		datumIsString = true
 	}
 
-	var decodedNonNumerical bool
+	var decodedIsNumerical, decodedIsString bool
 	var decodedFloat float64
+	var decodedString string
 	switch v := decoded.(type) {
 	case float64:
 		decodedFloat = v
+		decodedIsNumerical = true
 	case float32:
 		decodedFloat = float64(v)
+		decodedIsNumerical = true
 	case int:
 		decodedFloat = float64(v)
+		decodedIsNumerical = true
 	case int32:
 		decodedFloat = float64(v)
+		decodedIsNumerical = true
 	case int64:
 		decodedFloat = float64(v)
-	default:
-		decodedNonNumerical = true
+		decodedIsNumerical = true
+	case string:
+		decodedString = v
+		decodedIsString = true
 	}
 
 	// NOTE: Special handling when both datum and decoded values are floating
 	// point to test whether both are NaN, -Inf, or +Inf.
-	if datumNonNumerical || decodedNonNumerical {
-		if actual, expected := fmt.Sprintf("%v", decoded), fmt.Sprintf("%v", datum); actual != expected {
-			t.Errorf("schema: %s; Datum: %#v; Actual: %q; Expected: %q", schema, datum, actual, expected)
+	if datumIsNumerical && decodedIsNumerical {
+		if (math.IsNaN(datumFloat) != math.IsNaN(decodedFloat)) &&
+			(math.IsInf(datumFloat, 1) != math.IsInf(decodedFloat, 1)) &&
+			(math.IsInf(datumFloat, -1) != math.IsInf(decodedFloat, -1)) &&
+			datumFloat != decodedFloat {
+			t.Errorf("schema: %s; Datum: %v; Actual: %f; Expected: %f", schema, datum, decodedFloat, datumFloat)
 		}
-	} else if (math.IsNaN(datumFloat) != math.IsNaN(decodedFloat)) &&
-		(math.IsInf(datumFloat, 1) != math.IsInf(decodedFloat, 1)) &&
-		(math.IsInf(datumFloat, -1) != math.IsInf(decodedFloat, -1)) &&
-		datumFloat != decodedFloat {
-		t.Errorf("schema: %s; Datum: %v; Actual: %f; Expected: %f", schema, datum, decodedFloat, datumFloat)
+	} else if datumIsString && decodedIsString {
+		if actual, expected := decodedString, datumString; actual != expected {
+			t.Errorf("schema: %s; Datum: %v; Actual: %s; Expected: %s", schema, datum, actual, expected)
+		}
+	} else if actual, expected := fmt.Sprintf("%v", decoded), fmt.Sprintf("%v", datum); actual != expected {
+		t.Errorf("schema: %s; Datum: %v; Actual: %s; Expected: %s", schema, datum, actual, expected)
 	}
 }
 
@@ -125,7 +143,7 @@ func testTextEncodePass(t *testing.T, schema string, datum interface{}, expected
 		t.Fatalf("schema: %s; Datum: %v; %s", schema, datum, err)
 	}
 	if !bytes.Equal(actual, expected) {
-		t.Errorf("schema: %s; Datum: %v; Actual: %q; Expected: %q", schema, datum, actual, expected)
+		t.Errorf("schema: %s; Datum: %v; Actual: %+q; Expected: %+q", schema, datum, actual, expected)
 	}
 }
 

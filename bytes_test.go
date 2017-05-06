@@ -1,6 +1,8 @@
 package goavro_test
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestSchemaPrimitiveCodecBytes(t *testing.T) {
 	testSchemaPrimativeCodec(t, "bytes")
@@ -18,8 +20,8 @@ func TestPrimitiveBytesText(t *testing.T) {
 	testTextEncodeFailBadDatumType(t, "bytes", 42)
 	testTextDecodeFailShortBuffer(t, "bytes", []byte(``))
 	testTextDecodeFailShortBuffer(t, "bytes", []byte(`"`))
-	testTextDecodeFailShortBuffer(t, "bytes", []byte(`..`))
-	testTextDecodeFailShortBuffer(t, "bytes", []byte(`".`))
+	testTextDecodeFail(t, "bytes", []byte(`..`), "expected initial \"")
+	testTextDecodeFail(t, "bytes", []byte(`".`), "expected final \"")
 
 	testTextCodecPass(t, "bytes", []byte(""), []byte("\"\""))
 	testTextCodecPass(t, "bytes", []byte("a"), []byte("\"a\""))
@@ -35,11 +37,14 @@ func TestPrimitiveBytesText(t *testing.T) {
 	testTextCodecPass(t, "bytes", []byte("a\tb"), []byte(`"a\tb"`))
 	testTextCodecPass(t, "bytes", []byte("a	b"), []byte(`"a\tb"`)) // tab byte between a and b
 
-	testTextDecodeFail(t, "bytes", []byte("\"a\\u\""), "short buffer")
-	testTextDecodeFail(t, "bytes", []byte("\"a\\u0\""), "short buffer")
-	testTextDecodeFail(t, "bytes", []byte("\"a\\u00\""), "short buffer")
-	testTextDecodeFail(t, "bytes", []byte("\"a\\u004\""), "short buffer")
-	// testTextDecodePass(t, "bytes", []byte("\"AA\""), []byte("\"a\\u0041\""))
+	testTextDecodeFailShortBuffer(t, "bytes", []byte("\"a\\u\""))
+	testTextDecodeFailShortBuffer(t, "bytes", []byte("\"a\\u0\""))
+	testTextDecodeFailShortBuffer(t, "bytes", []byte("\"a\\u00\""))
+	testTextDecodeFailShortBuffer(t, "bytes", []byte("\"a\\u004\""))
+
+	testTextCodecPass(t, "bytes", []byte("⌘"), []byte(`"\u00E2\u008C\u0098"`))
+
+	testTextCodecPass(t, "bytes", []byte("😂"), []byte(`"\u00F0\u009F\u0098\u0082"`))
 }
 
 func TestSchemaPrimitiveStringCodec(t *testing.T) {
@@ -58,8 +63,8 @@ func TestPrimitiveStringText(t *testing.T) {
 	testTextEncodeFailBadDatumType(t, "string", 42)
 	testTextDecodeFailShortBuffer(t, "string", []byte(``))
 	testTextDecodeFailShortBuffer(t, "string", []byte(`"`))
-	testTextDecodeFailShortBuffer(t, "string", []byte(`..`))
-	testTextDecodeFailShortBuffer(t, "string", []byte(`".`))
+	testTextDecodeFail(t, "string", []byte(`..`), "expected initial \"")
+	testTextDecodeFail(t, "string", []byte(`".`), "expected final \"")
 
 	testTextCodecPass(t, "string", "", []byte("\"\""))
 	testTextCodecPass(t, "string", "a", []byte("\"a\""))
@@ -79,5 +84,9 @@ func TestPrimitiveStringText(t *testing.T) {
 	testTextDecodeFail(t, "string", []byte("\"a\\u0\""), "short buffer")
 	testTextDecodeFail(t, "string", []byte("\"a\\u00\""), "short buffer")
 	testTextDecodeFail(t, "string", []byte("\"a\\u004\""), "short buffer")
-	// testTextDecodePass(t, "string", []byte("\"AA\""), []byte("\"a\\u0041\""))
+
+	testTextCodecPass(t, "string", "⌘", []byte("\"\\u2318\""))
+
+	// testTextEncodePass(t, "string", "😂", []byte("\"\\uD83D\\uDE02\""))
+	// testTextDecodePass(t, "string", "😂", []byte("\"\\uD83D\\uDE02\""))
 }
