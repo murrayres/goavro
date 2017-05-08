@@ -2,12 +2,28 @@ package goavro
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
-	"strconv"
 	"unicode"
 	"unicode/utf16"
 	"unicode/utf8"
+)
+
+const hexDigits = "0123456789ABCDEF"
+
+// While slices in Go are never constants, we can initialize them once and reuse
+// them many times.
+var (
+	sliceQuote          = []byte("\\\"")
+	sliceBackslash      = []byte("\\\\")
+	sliceSlash          = []byte("\\/")
+	sliceBackspace      = []byte("\\b")
+	sliceFormfeed       = []byte("\\f")
+	sliceNewline        = []byte("\\n")
+	sliceCarriageReturn = []byte("\\r")
+	sliceTab            = []byte("\\t")
+	sliceUnicode        = []byte("\\u")
 )
 
 ////////////////////////////////////////
@@ -83,11 +99,8 @@ func bytesTextDecoder(buf []byte) (interface{}, []byte, error) {
 	var escaped bool
 
 	// Loop through all remaining bytes, but note we will terminate early when
-	// find unescaped double quote. NOTE: Declaring i outside of loop so we can
-	// use it after loop completes.
-	var i, l int
-
-	for i, l = 1, buflen-1; i < l; i++ {
+	// find unescaped double quote.
+	for i := 1; i < buflen; i++ {
 		b := buf[i]
 		if escaped {
 			escaped = false
@@ -123,14 +136,11 @@ func bytesTextDecoder(buf []byte) (interface{}, []byte, error) {
 			continue
 		}
 		if b == '"' {
-			break
+			return newBytes, buf[i+1:], nil
 		}
 		newBytes = append(newBytes, b)
 	}
-	if b := buf[buflen-1]; b != '"' {
-		return nil, buf, fmt.Errorf("expected final \"; found: %c", b)
-	}
-	return newBytes, buf[i+1:], nil
+	return nil, buf, fmt.Errorf("expected final \"; found: %c", buf[buflen-1])
 }
 
 func stringTextDecoder(buf []byte) (interface{}, []byte, error) {
@@ -147,11 +157,8 @@ func stringTextDecoder(buf []byte) (interface{}, []byte, error) {
 	var escaped bool
 
 	// Loop through all remaining bytes, but note we will terminate early when
-	// find unescaped double quote. NOTE: Declaring i outside of loop so we can
-	// use it after loop completes.
-	var i, l int
-
-	for i, l = 1, buflen-1; i < l; i++ {
+	// find unescaped double quote.
+	for i := 1; i < buflen; i++ {
 		b := buf[i]
 		if escaped {
 			escaped = false
@@ -173,46 +180,30 @@ func stringTextDecoder(buf []byte) (interface{}, []byte, error) {
 				}
 				i += 4 // absorb 4 characters: one 'u' and three of the digits
 
-				r1 := rune(v)
-				if !utf16.IsSurrogate(r1) {
-					// NOTE: decode UTF-16 rune, then encode it back as UTF-8:
+				nbl := len(newBytes)
+				newBytes = append(newBytes, []byte{0, 0, 0, 0}...) // grow to make room for UTF-8 encoded rune
 
-					// Get Unicode Code Point from UTF-16
-					r1 = utf16.Decode([]uint16{uint16(v)})[0]
+				r := rune(v)
+				if utf16.IsSurrogate(r) {
+					i++ // absorb final hexidecimal digit from previous value
 
-					// Get UTF8 from Unicode Code Point.
-					// NOTE: All code points which do not require surrogate
-					// pairs in UTF-16 will require either 1, 2, or 3 bytes in
-					// UTF-8.
-					ol := len(newBytes)
-					newBytes = append(newBytes, []byte{0, 0, 0, 0}...) // grow to make room for UTF-8 encoded rune
-					width := utf8.EncodeRune(newBytes[ol:], r1)        // append UTF-8 encoded version of code point
-					newBytes = newBytes[:ol+width]                     // trim off excess bytes
-					continue
+					// Expect second half of surrogate pair
+					if i > buflen-6 || buf[i] != '\\' || buf[i+1] != 'u' {
+						return nil, buf, errors.New("missing second half of surrogate pair")
+					}
+
+					v, err = parseUint64FromHexSlice(buf[i+2 : i+6])
+					if err != nil {
+						return nil, buf, err
+					}
+					i += 5 // absorb 5 characters: two for '\u', and 3 of the 4 digits
+
+					// Get code point by combining high and low surrogate bits
+					r = utf16.DecodeRune(r, rune(v))
 				}
 
-				i++ // absorb final hexidecimal digit from previous value
-
-				// Expect second half of surrogate pair
-				if i > buflen-6 || buf[i] != '\\' || buf[i+1] != 'u' {
-					return nil, buf, fmt.Errorf("missing second half of surrogate pair for: \\u%X", v)
-				}
-				v, err = parseUint64FromHexSlice(buf[i+2 : i+6])
-				if err != nil {
-					return nil, buf, err
-				}
-				i += 5 // absorb 5 characters: two for '\u', and 3 of the digits
-
-				r2 := rune(v)
-				if !utf16.IsSurrogate(r2) {
-					return nil, buf, fmt.Errorf("second half of surrogate pair is invalid: %#U", r2)
-				}
-				r3 := utf16.DecodeRune(r1, r2)
-
-				// NOTE: All code points requiring surrogate pairs in UTF-16 require 4 bytes in UTF-8.
-				ol := len(newBytes)
-				newBytes = append(newBytes, []byte{0, 0, 0, 0}...)
-				_ = utf8.EncodeRune(newBytes[ol:], r3)
+				width := utf8.EncodeRune(newBytes[nbl:], r) // append UTF-8 encoded version of code point
+				newBytes = newBytes[:nbl+width]             // trim off excess bytes
 				continue
 			}
 			newBytes = append(newBytes, b)
@@ -223,140 +214,11 @@ func stringTextDecoder(buf []byte) (interface{}, []byte, error) {
 			continue
 		}
 		if b == '"' {
-			break
+			return string(newBytes), buf[i+1:], nil
 		}
 		newBytes = append(newBytes, b)
 	}
-	if b := buf[l]; b != '"' {
-		return nil, buf, fmt.Errorf("expected final \"; found: %c", b)
-	}
-	return string(newBytes), buf[i+1:], nil
-}
-
-////////////////////////////////////////
-// Text Encode
-////////////////////////////////////////
-
-const hexDigits = "0123456789ABCDEF"
-
-// While slices in Go are never constants, we can initialize them once and reuse
-// them many times.
-var (
-	sliceQuote          = []byte("\\\"")
-	sliceBackslash      = []byte("\\\\")
-	sliceSlash          = []byte("\\/")
-	sliceBackspace      = []byte("\\b")
-	sliceFormfeed       = []byte("\\f")
-	sliceNewline        = []byte("\\n")
-	sliceCarriageReturn = []byte("\\r")
-	sliceTab            = []byte("\\t")
-	sliceUnicode        = []byte("\\u")
-)
-
-func bytesTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
-	someBytes, ok := datum.([]byte)
-	if !ok {
-		// panic("string rather than []byte")
-		return buf, fmt.Errorf("bytes: expected: []byte; received: %T", datum)
-	}
-	buf = append(buf, '"') // prefix buffer with double quote
-	for _, b := range someBytes {
-		if escaped, ok := escapeSpecialJSON(b); ok {
-			buf = append(buf, escaped...)
-			continue
-		}
-		if r := rune(b); r < utf8.RuneSelf && unicode.IsPrint(r) {
-			buf = append(buf, b)
-			continue
-		}
-		// This Code Point _could_ be encoded as a single byte, however, it's
-		// above standard ASCII range (b > 127), therefore must encode using its
-		// four-byte hexidecimal equivalent, which will always start with the high byte 00
-		buf = append(append(append(buf, []byte("\\u00")...), hexDigits[b>>4]), hexDigits[b&0x0f])
-	}
-	return append(buf, '"'), nil // postfix buffer with double quote
-}
-
-func stringTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
-	someString, ok := datum.(string)
-	if !ok {
-		// panic("[]byte rather than string")
-		return buf, fmt.Errorf("bytes: expected: string; received: %T", datum)
-	}
-	buf = append(buf, '"') // prefix buffer with double quote
-	for _, r := range someString {
-		if escaped, ok := escapeSpecialJSON(byte(r)); ok {
-			buf = append(buf, escaped...)
-			continue
-		}
-		if r < utf8.RuneSelf && unicode.IsPrint(r) {
-			buf = append(buf, byte(r))
-			continue
-		}
-		// NOTE: Attempt to encode code point as UTF-16 surrogate pair
-		r1, r2 := utf16.EncodeRune(r)
-		if r1 != '\ufffd' || r2 != '\ufffd' {
-			// code point does require surrogate pair, and thus two uint16 values
-			buf = append(buf, []byte(fmt.Sprintf("\\u%04X\\u%04X", r1, r2))...)
-			continue
-		}
-		// code point does not require surrogate pair, so single uint16 will do
-		// want 4 nibbles
-		buf = append(buf, sliceUnicode...)
-		if r < 0x1000 {
-			buf = append(buf, '0')
-			if r < 0x100 {
-				buf = append(buf, '0')
-				if r < 0x10 {
-					buf = append(buf, '0')
-				}
-			}
-		}
-		buf = strconv.AppendInt(buf, int64(r), 16)
-	}
-	return append(buf, '"'), nil // postfix buffer with double quote
-}
-
-func escapeSpecialJSON(b byte) ([]byte, bool) {
-	// NOTE: The following 8 special JSON characters must be escaped:
-	switch b {
-	case '"':
-		return sliceQuote, true
-	case '\\':
-		return sliceBackslash, true
-	case '/':
-		return sliceSlash, true
-	case '\b':
-		return sliceBackspace, true
-	case '\f':
-		return sliceFormfeed, true
-	case '\n':
-		return sliceNewline, true
-	case '\r':
-		return sliceCarriageReturn, true
-	case '\t':
-		return sliceTab, true
-	}
-	return nil, false
-}
-
-func unescapeSpecialJSON(b byte) (byte, bool) {
-	// NOTE: The following 8 special JSON characters must be escaped:
-	switch b {
-	case '"', '\\', '/':
-		return b, true
-	case 'b':
-		return '\b', true
-	case 'f':
-		return '\f', true
-	case 'n':
-		return '\n', true
-	case 'r':
-		return '\r', true
-	case 't':
-		return '\t', true
-	}
-	return b, false
+	return nil, buf, fmt.Errorf("expected final \"; found: %c", buf[buflen-1])
 }
 
 func parseUint64FromHexSlice(buf []byte) (uint64, error) {
@@ -390,4 +252,115 @@ func parseUint64FromHexSlice(buf []byte) (uint64, error) {
 		return 0, hex.InvalidByteError(b)
 	}
 	return value, nil
+}
+
+func unescapeSpecialJSON(b byte) (byte, bool) {
+	// NOTE: The following 8 special JSON characters must be escaped:
+	switch b {
+	case '"', '\\', '/':
+		return b, true
+	case 'b':
+		return '\b', true
+	case 'f':
+		return '\f', true
+	case 'n':
+		return '\n', true
+	case 'r':
+		return '\r', true
+	case 't':
+		return '\t', true
+	}
+	return b, false
+}
+
+////////////////////////////////////////
+// Text Encode
+////////////////////////////////////////
+
+func bytesTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
+	someBytes, ok := datum.([]byte)
+	if !ok {
+		// panic("string rather than []byte")
+		return buf, fmt.Errorf("bytes: expected: []byte; received: %T", datum)
+	}
+	buf = append(buf, '"') // prefix buffer with double quote
+	for _, b := range someBytes {
+		if escaped, ok := escapeSpecialJSON(b); ok {
+			buf = append(buf, escaped...)
+			continue
+		}
+		if r := rune(b); r < utf8.RuneSelf && unicode.IsPrint(r) {
+			buf = append(buf, b)
+			continue
+		}
+		// This Code Point _could_ be encoded as a single byte, however, it's
+		// above standard ASCII range (b > 127), therefore must encode using its
+		// four-byte hexidecimal equivalent, which will always start with the high byte 00
+		buf = appendUnicodeHex(buf, uint16(b))
+	}
+	return append(buf, '"'), nil // postfix buffer with double quote
+}
+
+func stringTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
+	someString, ok := datum.(string)
+	if !ok {
+		// panic("[]byte rather than string")
+		return buf, fmt.Errorf("bytes: expected: string; received: %T", datum)
+	}
+	buf = append(buf, '"') // prefix buffer with double quote
+	for _, r := range someString {
+		if escaped, ok := escapeSpecialJSON(byte(r)); ok {
+			buf = append(buf, escaped...)
+			continue
+		}
+		if r < utf8.RuneSelf && unicode.IsPrint(r) {
+			buf = append(buf, byte(r))
+			continue
+		}
+		// NOTE: Attempt to encode code point as UTF-16 surrogate pair
+		r1, r2 := utf16.EncodeRune(r)
+		if r1 != unicode.ReplacementChar || r2 != unicode.ReplacementChar {
+			// code point does require surrogate pair, and thus two uint16 values
+			buf = appendUnicodeHex(buf, uint16(r1))
+			buf = appendUnicodeHex(buf, uint16(r2))
+			continue
+		}
+		// Code Point does not require surrogate pair.
+		buf = appendUnicodeHex(buf, uint16(r))
+	}
+	return append(buf, '"'), nil // postfix buffer with double quote
+}
+
+func appendUnicodeHex(buf []byte, v uint16) []byte {
+	// Start with '\u' prefix:
+	buf = append(buf, sliceUnicode...)
+	// And tack on 4 hexidecimal digits:
+	buf = append(buf, hexDigits[(v&0xF000)>>12])
+	buf = append(buf, hexDigits[(v&0xF00)>>8])
+	buf = append(buf, hexDigits[(v&0xF0)>>4])
+	buf = append(buf, hexDigits[(v&0xF)])
+	return buf
+}
+
+func escapeSpecialJSON(b byte) ([]byte, bool) {
+	// NOTE: The following 8 special JSON characters must be escaped:
+	switch b {
+	case '"':
+		return sliceQuote, true
+	case '\\':
+		return sliceBackslash, true
+	case '/':
+		return sliceSlash, true
+	case '\b':
+		return sliceBackspace, true
+	case '\f':
+		return sliceFormfeed, true
+	case '\n':
+		return sliceNewline, true
+	case '\r':
+		return sliceCarriageReturn, true
+	case '\t':
+		return sliceTab, true
+	}
+	return nil, false
 }
