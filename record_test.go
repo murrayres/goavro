@@ -115,7 +115,7 @@ func TestRecordFieldTypeHasPrimitiveName(t *testing.T) {
 		t.Fatal(err)
 	}
 	if expected := []byte{
-		0x10, // field1 length = 8
+		0x10, // field1 size = 8
 		't', 'h', 'i', 'r', 't', 'e', 'e', 'n',
 		0x1a, // field2 == 13
 	}; !bytes.Equal(buf, expected) {
@@ -321,8 +321,8 @@ func TestRecordNamespace(t *testing.T) {
 	}
 
 	datumIn := map[string]interface{}{
-		"X": "abcd",
-		"Z": "efgh",
+		"X": []byte("abcd"),
+		"Z": []byte("efgh"),
 	}
 
 	buf, err := c.BinaryEncode(nil, datumIn)

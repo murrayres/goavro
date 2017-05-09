@@ -123,8 +123,8 @@ func TestSchemaFixedNameCanBeUsedLater(t *testing.T) {
                    {"name":"field2","type":"fixed_4"}]}`
 
 	datum := map[string]interface{}{
-		"field1": "abcd",
-		"field2": "efgh",
+		"field1": []byte("abcd"),
+		"field2": []byte("efgh"),
 	}
 
 	testBinaryEncodePass(t, schema, datum, []byte("abcdefgh"))
@@ -137,7 +137,7 @@ func TestMapValueTypeEnum(t *testing.T) {
 
 	expected := []byte{
 		0x2, // blockCount = 1 pair
-		0xe, // key length = 7
+		0xe, // key size = 7
 		's', 'o', 'm', 'e', 'K', 'e', 'y',
 		0x2, // value = index 1 ("bravo")
 		0,   // blockCount = 0 pairs
@@ -158,10 +158,10 @@ func TestMapValueTypeRecord(t *testing.T) {
 
 	expected := []byte{
 		0x2,                               // blockCount = 1 key-value pair in top level map
-		0xe,                               // first key length = 7
+		0xe,                               // first key size = 7
 		'm', 'a', 'p', '-', 'k', 'e', 'y', // first key = "map-key"
 		// this key's value is a record, which is encoded by concatenated its field values
-		0x0e, // field one string length = 7
+		0x0e, // field one string size = 7
 		'u', 'n', 'l', 'u', 'c', 'k', 'y',
 		0x1a, // 13
 		0,    // map has no more blocks

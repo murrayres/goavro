@@ -54,12 +54,12 @@ func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap 
 		fieldCodecs[i] = fieldCodec
 	}
 
-	c.binaryDecoder = func(buf []byte) (interface{}, []byte, error) {
+	c.decoder = func(buf []byte) (interface{}, []byte, error) {
 		recordMap := make(map[string]interface{}, len(fieldCodecs))
 		for i, fieldCodec := range fieldCodecs {
 			var value interface{}
 			var err error
-			value, buf, err = fieldCodec.binaryDecoder(buf)
+			value, buf, err = fieldCodec.decoder(buf)
 			if err != nil {
 				return nil, buf, err
 			}
@@ -67,7 +67,7 @@ func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap 
 		}
 		return recordMap, buf, nil
 	}
-	c.binaryEncoder = func(buf []byte, datum interface{}) ([]byte, error) {
+	c.encoder = func(buf []byte, datum interface{}) ([]byte, error) {
 		valueMap, ok := datum.(map[string]interface{})
 		if !ok {
 			return buf, fmt.Errorf("Record %q value ought to be map[string]interface{}; received: %T", c.typeName, datum)
@@ -81,7 +81,7 @@ func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap 
 			fieldValue, ok := valueMap[fieldName]
 
 			var err error
-			buf, err = fieldCodec.binaryEncoder(buf, fieldValue)
+			buf, err = fieldCodec.encoder(buf, fieldValue)
 			if err != nil {
 				if !ok {
 					return buf, fmt.Errorf("Record %q field value for %q was not specified", c.typeName, fieldName)

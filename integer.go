@@ -17,7 +17,7 @@ const (
 // Binary Decode
 ////////////////////////////////////////
 
-func intBinaryDecoder(buf []byte) (interface{}, []byte, error) {
+func intDecoder(buf []byte) (interface{}, []byte, error) {
 	var offset, value int
 	var shift uint
 	for offset = 0; offset < len(buf); offset++ {
@@ -31,7 +31,7 @@ func intBinaryDecoder(buf []byte) (interface{}, []byte, error) {
 	return nil, nil, io.ErrShortBuffer
 }
 
-func longBinaryDecoder(buf []byte) (interface{}, []byte, error) {
+func longDecoder(buf []byte) (interface{}, []byte, error) {
 	var offset int
 	var value uint64
 	var shift uint
@@ -50,7 +50,7 @@ func longBinaryDecoder(buf []byte) (interface{}, []byte, error) {
 // Binary Encode
 ////////////////////////////////////////
 
-func intBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
+func intEncoder(buf []byte, datum interface{}) ([]byte, error) {
 	var value int32
 	switch v := datum.(type) {
 	case int32:
@@ -80,7 +80,7 @@ func intBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
 
 // receives any Go numeric type and casts to int64, possibly with data loss if the value the client
 // sent is not represented in a int64.
-func longBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
+func longEncoder(buf []byte, datum interface{}) ([]byte, error) {
 	var value int64
 	switch v := datum.(type) {
 	case int64:
@@ -133,7 +133,7 @@ func intTextDecoder(buf []byte) (interface{}, []byte, error) {
 }
 
 func integerTextDecoder(buf []byte, bitSize int) (interface{}, []byte, error) {
-	index, err := numberLength(buf, false)
+	index, err := numberLength(buf, false) // NOTE: floatAllowed = false
 	if err != nil {
 		return nil, buf, err
 	}
@@ -172,17 +172,15 @@ func integerTextEncoder(buf []byte, datum interface{}, bitSize int) ([]byte, err
 		if someInt64 = int64(v); float32(someInt64) != v {
 			if bitSize == 64 {
 				return buf, fmt.Errorf("long: provided Go int would lose precision: %f", v)
-			} else {
-				return buf, fmt.Errorf("int: provided Go int would lose precision: %f", v)
 			}
+			return buf, fmt.Errorf("int: provided Go int would lose precision: %f", v)
 		}
 	case float64:
 		if someInt64 = int64(v); float64(someInt64) != v {
 			if bitSize == 64 {
 				return buf, fmt.Errorf("long: provided Go int would lose precision: %f", v)
-			} else {
-				return buf, fmt.Errorf("int: provided Go int would lose precision: %f", v)
 			}
+			return buf, fmt.Errorf("int: provided Go int would lose precision: %f", v)
 		}
 	default:
 		return buf, fmt.Errorf("float: expected: Go numeric; received: %T", datum)

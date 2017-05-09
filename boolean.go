@@ -7,7 +7,7 @@ import (
 	"io"
 )
 
-func booleanBinaryDecoder(buf []byte) (interface{}, []byte, error) {
+func booleanDecoder(buf []byte) (interface{}, []byte, error) {
 	if len(buf) < 1 {
 		return nil, nil, io.ErrShortBuffer
 	}
@@ -23,7 +23,7 @@ func booleanBinaryDecoder(buf []byte) (interface{}, []byte, error) {
 	}
 }
 
-func booleanBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
+func booleanEncoder(buf []byte, datum interface{}) ([]byte, error) {
 	value, ok := datum.(bool)
 	if !ok {
 		return buf, fmt.Errorf("boolean: expected: Go bool; received: %T", datum)

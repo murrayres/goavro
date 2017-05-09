@@ -48,8 +48,8 @@ type Codec struct {
 	typeName    *name
 	symbolTable map[string]*Codec
 
-	binaryDecoder func([]byte) (interface{}, []byte, error)
-	binaryEncoder func([]byte, interface{}) ([]byte, error)
+	decoder func([]byte) (interface{}, []byte, error)
+	encoder func([]byte, interface{}) ([]byte, error)
 
 	textDecoder func([]byte) (interface{}, []byte, error)
 	textEncoder func([]byte, interface{}) ([]byte, error)
@@ -58,53 +58,53 @@ type Codec struct {
 func newSymbolTable() map[string]*Codec {
 	return map[string]*Codec{
 		"boolean": &Codec{
-			typeName:      &name{"boolean", nullNamespace},
-			binaryDecoder: booleanBinaryDecoder,
-			binaryEncoder: booleanBinaryEncoder,
-			textDecoder:   booleanTextDecoder,
-			textEncoder:   booleanTextEncoder,
+			typeName:    &name{"boolean", nullNamespace},
+			decoder:     booleanDecoder,
+			encoder:     booleanEncoder,
+			textDecoder: booleanTextDecoder,
+			textEncoder: booleanTextEncoder,
 		},
 		"bytes": &Codec{typeName: &name{"bytes", nullNamespace},
-			binaryDecoder: bytesBinaryDecoder,
-			binaryEncoder: bytesBinaryEncoder,
-			textDecoder:   bytesTextDecoder,
-			textEncoder:   bytesTextEncoder,
+			decoder:     bytesDecoder,
+			encoder:     bytesEncoder,
+			textDecoder: bytesTextDecoder,
+			textEncoder: bytesTextEncoder,
 		},
 		"double": &Codec{typeName: &name{"double", nullNamespace},
-			binaryDecoder: doubleBinaryDecoder,
-			binaryEncoder: doubleBinaryEncoder,
-			textDecoder:   doubleTextDecoder,
-			textEncoder:   doubleTextEncoder,
+			decoder:     doubleDecoder,
+			encoder:     doubleEncoder,
+			textDecoder: doubleTextDecoder,
+			textEncoder: doubleTextEncoder,
 		},
 		"float": &Codec{typeName: &name{"float", nullNamespace},
-			binaryDecoder: floatBinaryDecoder,
-			binaryEncoder: floatBinaryEncoder,
-			textDecoder:   floatTextDecoder,
-			textEncoder:   floatTextEncoder,
+			decoder:     floatDecoder,
+			encoder:     floatEncoder,
+			textDecoder: floatTextDecoder,
+			textEncoder: floatTextEncoder,
 		},
 		"int": &Codec{typeName: &name{"int", nullNamespace},
-			binaryDecoder: intBinaryDecoder,
-			binaryEncoder: intBinaryEncoder,
-			textDecoder:   intTextDecoder,
-			textEncoder:   intTextEncoder,
+			decoder:     intDecoder,
+			encoder:     intEncoder,
+			textDecoder: intTextDecoder,
+			textEncoder: intTextEncoder,
 		},
 		"long": &Codec{typeName: &name{"long", nullNamespace},
-			binaryDecoder: longBinaryDecoder,
-			binaryEncoder: longBinaryEncoder,
-			textDecoder:   longTextDecoder,
-			textEncoder:   longTextEncoder,
+			decoder:     longDecoder,
+			encoder:     longEncoder,
+			textDecoder: longTextDecoder,
+			textEncoder: longTextEncoder,
 		},
 		"null": &Codec{typeName: &name{"null", nullNamespace},
-			binaryDecoder: nullBinaryDecoder,
-			binaryEncoder: nullBinaryEncoder,
-			textDecoder:   nullTextDecoder,
-			textEncoder:   nullTextEncoder,
+			decoder:     nullDecoder,
+			encoder:     nullEncoder,
+			textDecoder: nullTextDecoder,
+			textEncoder: nullTextEncoder,
 		},
 		"string": &Codec{typeName: &name{"string", nullNamespace},
-			binaryDecoder: stringBinaryDecoder,
-			binaryEncoder: stringBinaryEncoder,
-			textDecoder:   stringTextDecoder,
-			textEncoder:   stringTextEncoder,
+			decoder:     stringDecoder,
+			encoder:     stringEncoder,
+			textDecoder: stringTextDecoder,
+			textEncoder: stringTextEncoder,
 		},
 	}
 }
@@ -143,7 +143,7 @@ func NewCodec(schemaSpecification string) (*Codec, error) {
 // original byte slice, but with the first three bytes removed.  On error, it
 // returns the original byte slice without any bytes consumed and the error.
 func (c Codec) BinaryDecode(buf []byte) (interface{}, []byte, error) {
-	value, newBuf, err := c.binaryDecoder(buf)
+	value, newBuf, err := c.decoder(buf)
 	if err != nil {
 		return nil, buf, err // if error, return original byte slice
 	}
@@ -155,7 +155,7 @@ func (c Codec) BinaryDecode(buf []byte) (interface{}, []byte, error) {
 // success, it returns the new byte slice with the appended byte slice.  On
 // error, it returns the original byte slice without any encoded bytes.
 func (c Codec) BinaryEncode(buf []byte, datum interface{}) ([]byte, error) {
-	newBuf, err := c.binaryEncoder(buf, datum)
+	newBuf, err := c.encoder(buf, datum)
 	if err != nil {
 		return buf, err // if error, return original byte slice
 	}

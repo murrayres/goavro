@@ -10,38 +10,22 @@ import (
 	"unicode/utf8"
 )
 
-const hexDigits = "0123456789ABCDEF"
-
-// While slices in Go are never constants, we can initialize them once and reuse
-// them many times.
-var (
-	sliceQuote          = []byte("\\\"")
-	sliceBackslash      = []byte("\\\\")
-	sliceSlash          = []byte("\\/")
-	sliceBackspace      = []byte("\\b")
-	sliceFormfeed       = []byte("\\f")
-	sliceNewline        = []byte("\\n")
-	sliceCarriageReturn = []byte("\\r")
-	sliceTab            = []byte("\\t")
-	sliceUnicode        = []byte("\\u")
-)
-
 ////////////////////////////////////////
 // Binary Decode
 ////////////////////////////////////////
 
-func bytesBinaryDecoder(buf []byte) (interface{}, []byte, error) {
+func bytesDecoder(buf []byte) (interface{}, []byte, error) {
 	if len(buf) < 1 {
 		return nil, nil, io.ErrShortBuffer
 	}
 	var decoded interface{}
 	var err error
-	if decoded, buf, err = longBinaryDecoder(buf); err != nil {
+	if decoded, buf, err = longDecoder(buf); err != nil {
 		return nil, buf, fmt.Errorf("bytes: %s", err)
 	}
-	size := decoded.(int64) // longDecoder always returns int64
+	size := decoded.(int64) // always returns int64
 	if size < 0 {
-		return nil, buf, fmt.Errorf("bytes: negative length: %d", size)
+		return nil, buf, fmt.Errorf("bytes: negative size: %d", size)
 	}
 	if size > int64(len(buf)) {
 		return nil, buf, io.ErrShortBuffer
@@ -49,8 +33,8 @@ func bytesBinaryDecoder(buf []byte) (interface{}, []byte, error) {
 	return buf[:size], buf[size:], nil
 }
 
-func stringBinaryDecoder(buf []byte) (interface{}, []byte, error) {
-	d, b, err := bytesBinaryDecoder(buf)
+func stringDecoder(buf []byte) (interface{}, []byte, error) {
+	d, b, err := bytesDecoder(buf)
 	if err != nil {
 		return nil, buf, err
 	}
@@ -61,24 +45,22 @@ func stringBinaryDecoder(buf []byte) (interface{}, []byte, error) {
 // Binary Encode
 ////////////////////////////////////////
 
-func bytesBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
-	var value []byte
-	switch v := datum.(type) {
-	case []byte:
-		value = v
-	case string:
-		value = []byte(v)
-	default:
-		return buf, fmt.Errorf("bytes: expected: Go string or []byte; received: %T", v)
+func bytesEncoder(buf []byte, datum interface{}) ([]byte, error) {
+	someBytes, ok := datum.([]byte)
+	if !ok {
+		return buf, fmt.Errorf("bytes: expected: []byte; received: %T", datum)
 	}
-	// longEncoder only fails when given non int, so elide error checking
-	buf, _ = longBinaryEncoder(buf, len(value))
-	// append datum bytes
-	return append(buf, value...), nil
+	buf, _ = longEncoder(buf, len(someBytes)) // only fails when given non integer
+	return append(buf, someBytes...), nil     // append datum bytes
 }
 
-func stringBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
-	return bytesBinaryEncoder(buf, datum)
+func stringEncoder(buf []byte, datum interface{}) ([]byte, error) {
+	someBytes, ok := datum.(string)
+	if !ok {
+		return buf, fmt.Errorf("bytes: expected: string; received: %T", datum)
+	}
+	buf, _ = longEncoder(buf, len(someBytes)) // only fails when given non integer
+	return append(buf, someBytes...), nil     // append datum bytes
 }
 
 ////////////////////////////////////////
@@ -86,7 +68,6 @@ func stringBinaryEncoder(buf []byte, datum interface{}) ([]byte, error) {
 ////////////////////////////////////////
 
 func bytesTextDecoder(buf []byte) (interface{}, []byte, error) {
-	// scan each character, being mindful of escape sequence. once find unescaped quote, we're done
 	buflen := len(buf)
 	if buflen < 2 {
 		return nil, buf, io.ErrShortBuffer
@@ -94,12 +75,10 @@ func bytesTextDecoder(buf []byte) (interface{}, []byte, error) {
 	if buf[0] != '"' {
 		return nil, buf, fmt.Errorf("expected initial \"; found: %c", buf[0])
 	}
-
 	var newBytes []byte
 	var escaped bool
-
-	// Loop through all remaining bytes, but note we will terminate early when
-	// find unescaped double quote.
+	// Loop through bytes following initial double quote, but note we will
+	// return immediately when find unescaped double quote.
 	for i := 1; i < buflen; i++ {
 		b := buf[i]
 		if escaped {
@@ -119,7 +98,7 @@ func bytesTextDecoder(buf []byte) (interface{}, []byte, error) {
 				// NOTE: Avro bytes represent binary data, and do not
 				// necessarily represent text. Therefore, Avro bytes are not
 				// encoded in UTF-16. Each \u is followed by 4 hexidecimal
-				// digits, the first of which must be 0.
+				// digits, the first and second of which must be 0.
 				v, err := parseUint64FromHexSlice(buf[i+3 : i+5])
 				if err != nil {
 					return nil, buf, err
@@ -144,7 +123,6 @@ func bytesTextDecoder(buf []byte) (interface{}, []byte, error) {
 }
 
 func stringTextDecoder(buf []byte) (interface{}, []byte, error) {
-	// scan each character, being mindful of escape sequence. once find unescaped quote, we're done
 	buflen := len(buf)
 	if buflen < 2 {
 		return nil, buf, io.ErrShortBuffer
@@ -152,12 +130,10 @@ func stringTextDecoder(buf []byte) (interface{}, []byte, error) {
 	if buf[0] != '"' {
 		return nil, buf, fmt.Errorf("expected initial \"; found: %c", buf[0])
 	}
-
 	var newBytes []byte
 	var escaped bool
-
-	// Loop through all remaining bytes, but note we will terminate early when
-	// find unescaped double quote.
+	// Loop through bytes following initial double quote, but note we will
+	// return immediately when find unescaped double quote.
 	for i := 1; i < buflen; i++ {
 		b := buf[i]
 		if escaped {
@@ -280,7 +256,6 @@ func unescapeSpecialJSON(b byte) (byte, bool) {
 func bytesTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
 	someBytes, ok := datum.([]byte)
 	if !ok {
-		// panic("string rather than []byte")
 		return buf, fmt.Errorf("bytes: expected: []byte; received: %T", datum)
 	}
 	buf = append(buf, '"') // prefix buffer with double quote
@@ -304,7 +279,6 @@ func bytesTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
 func stringTextEncoder(buf []byte, datum interface{}) ([]byte, error) {
 	someString, ok := datum.(string)
 	if !ok {
-		// panic("[]byte rather than string")
 		return buf, fmt.Errorf("bytes: expected: string; received: %T", datum)
 	}
 	buf = append(buf, '"') // prefix buffer with double quote
@@ -342,6 +316,8 @@ func appendUnicodeHex(buf []byte, v uint16) []byte {
 	return buf
 }
 
+const hexDigits = "0123456789ABCDEF"
+
 func escapeSpecialJSON(b byte) ([]byte, bool) {
 	// NOTE: The following 8 special JSON characters must be escaped:
 	switch b {
@@ -364,3 +340,18 @@ func escapeSpecialJSON(b byte) ([]byte, bool) {
 	}
 	return nil, false
 }
+
+// While slices in Go are never constants, we can initialize them once and reuse
+// them many times. We define these slices at library load time and reuse them
+// when encoding JSON.
+var (
+	sliceQuote          = []byte("\\\"")
+	sliceBackslash      = []byte("\\\\")
+	sliceSlash          = []byte("\\/")
+	sliceBackspace      = []byte("\\b")
+	sliceFormfeed       = []byte("\\f")
+	sliceNewline        = []byte("\\n")
+	sliceCarriageReturn = []byte("\\r")
+	sliceTab            = []byte("\\t")
+	sliceUnicode        = []byte("\\u")
+)

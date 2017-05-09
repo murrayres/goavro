@@ -11,7 +11,6 @@ func makeFixedCodec(st map[string]*Codec, enclosingNamespace string, schemaMap m
 	if err != nil {
 		return nil, fmt.Errorf("Fixed ought to have valid name: %s", err)
 	}
-
 	// Fixed type must have size
 	s1, ok := schemaMap["size"]
 	if !ok {
@@ -21,28 +20,23 @@ func makeFixedCodec(st map[string]*Codec, enclosingNamespace string, schemaMap m
 	if !ok || s2 <= 0 {
 		return nil, fmt.Errorf("Fixed %q size ought to be number greater than zero: %v", c.typeName, s1)
 	}
-	size := int(s2)
+	size := uint(s2)
 
-	c.binaryDecoder = func(buf []byte) (interface{}, []byte, error) {
-		if len(buf) < size {
-			return nil, buf, fmt.Errorf("Fixed %q short buffer: size exceeds remaining buffer length: %d > %d", c.typeName, size, len(buf))
+	c.decoder = func(buf []byte) (interface{}, []byte, error) {
+		if buflen := uint(len(buf)); size > buflen {
+			return nil, buf, fmt.Errorf("Fixed %q short buffer: schema size exceeds remaining buffer size: %d > %d", c.typeName, size, buflen)
 		}
 		return buf[:size], buf[size:], nil
 	}
-	c.binaryEncoder = func(buf []byte, datum interface{}) ([]byte, error) {
-		var value []byte
-		switch v := datum.(type) {
-		case string:
-			value = []byte(v)
-		case []byte:
-			value = v
-		default:
-			return buf, fmt.Errorf("cannot encode Fixed %q: expected string or bytes; received: %T", c.typeName, v)
+	c.encoder = func(buf []byte, datum interface{}) ([]byte, error) {
+		someBytes, ok := datum.([]byte)
+		if !ok {
+			return buf, fmt.Errorf("cannot encode Fixed %q: expected []byte; received: %T", c.typeName, datum)
 		}
-		if count := len(value); count != size {
-			return buf, fmt.Errorf("cannot encode Fixed %q: datum length ought to equal size: %d != %d", c.typeName, count, size)
+		if count := uint(len(someBytes)); count != size {
+			return buf, fmt.Errorf("cannot encode Fixed %q: datum size ought to equal schema size: %d != %d", c.typeName, count, size)
 		}
-		return append(buf, value...), nil
+		return append(buf, someBytes...), nil
 	}
 
 	return c, nil
