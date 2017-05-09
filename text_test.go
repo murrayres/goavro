@@ -66,8 +66,9 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 		t.Errorf("schema: %s; Datum: %#v; Actual: %v; Expected: %v", schema, datum, actual, expected)
 	}
 
-	var datumIsNumerical, datumIsString bool
+	var datumIsMap, datumIsNumerical, datumIsString bool
 	var datumFloat float64
+	var datumMap map[string]interface{}
 	var datumString string
 	switch v := datum.(type) {
 	case float64:
@@ -88,9 +89,13 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 	case string:
 		datumString = v
 		datumIsString = true
+	case map[string]interface{}:
+		datumIsMap = true
+		datumMap = v
 	}
 
-	var decodedIsNumerical, decodedIsString bool
+	var decodedIsMap, decodedIsNumerical, decodedIsString bool
+	var decodedMap map[string]interface{}
 	var decodedFloat float64
 	var decodedString string
 	switch v := decoded.(type) {
@@ -112,6 +117,9 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 	case string:
 		decodedString = v
 		decodedIsString = true
+	case map[string]interface{}:
+		decodedIsMap = true
+		decodedMap = v
 	}
 
 	// NOTE: Special handling when both datum and decoded values are floating
@@ -121,11 +129,24 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 			(math.IsInf(datumFloat, 1) != math.IsInf(decodedFloat, 1)) &&
 			(math.IsInf(datumFloat, -1) != math.IsInf(decodedFloat, -1)) &&
 			datumFloat != decodedFloat {
-			t.Errorf("schema: %s; Datum: %v; Actual: %f; Expected: %f", schema, datum, decodedFloat, datumFloat)
+			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, decodedFloat, datumFloat)
+		}
+	} else if datumIsMap && decodedIsMap {
+		if actual, expected := len(decodedMap), len(datumMap); actual != expected {
+			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, actual, expected)
+		}
+		for key, datumValue := range datumMap {
+			decodedValue, ok := decodedMap[key]
+			if !ok {
+				t.Errorf("schema: %s; Datum: %v; Decoded Missing Key: %q", schema, datum, key)
+			}
+			if actual, expected := fmt.Sprintf("%v", decodedValue), fmt.Sprintf("%v", datumValue); actual != expected {
+				t.Errorf("schema: %s; Datum: %v; Value for key %q Mismatch: Actual: %v; Expected: %v", schema, datum, key, actual, expected)
+			}
 		}
 	} else if datumIsString && decodedIsString {
 		if actual, expected := decodedString, datumString; actual != expected {
-			t.Errorf("schema: %s; Datum: %v; Actual: %s; Expected: %s", schema, datum, actual, expected)
+			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, actual, expected)
 		}
 	} else if actual, expected := fmt.Sprintf("%v", decoded), fmt.Sprintf("%v", datum); actual != expected {
 		t.Errorf("schema: %s; Datum: %v; Actual: %s; Expected: %s", schema, datum, actual, expected)
