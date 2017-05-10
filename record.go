@@ -93,7 +93,16 @@ func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap 
 	}
 
 	c.textDecoder = func(buf []byte) (interface{}, []byte, error) {
-		return genericMapTextDecoder(buf, nil, codecFromFieldName) // defaultCodec == nil
+		var mapValues map[string]interface{}
+		var err error
+		mapValues, buf, err = genericMapTextDecoder(buf, nil, codecFromFieldName) // defaultCodec == nil
+		if err != nil {
+			return nil, buf, err
+		}
+		if actual, expected := len(mapValues), len(codecFromFieldName); actual != expected {
+			return nil, buf, fmt.Errorf("cannot decode Record: only found %d of %d fields", actual, expected)
+		}
+		return mapValues, buf, nil
 	}
 
 	c.textEncoder = func(buf []byte, datum interface{}) ([]byte, error) {

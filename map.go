@@ -120,7 +120,7 @@ func makeMapCodec(st map[string]*Codec, namespace string, schemaMap map[string]i
 			return longEncoder(buf, 0) // append tailing 0 block count to signal end of Map
 		},
 		textDecoder: func(buf []byte) (interface{}, []byte, error) {
-			return genericMapTextDecoder(buf, valueCodec, nil)
+			return genericMapTextDecoder(buf, valueCodec, nil) // codecFromKey == nil
 		},
 		textEncoder: func(buf []byte, datum interface{}) ([]byte, error) {
 			return genericMapTextEncoder(buf, datum, valueCodec, nil)
@@ -128,7 +128,7 @@ func makeMapCodec(st map[string]*Codec, namespace string, schemaMap map[string]i
 	}, nil
 }
 
-func genericMapTextDecoder(buf []byte, defaultCodec *Codec, codecFromKey map[string]*Codec) (interface{}, []byte, error) {
+func genericMapTextDecoder(buf []byte, defaultCodec *Codec, codecFromKey map[string]*Codec) (map[string]interface{}, []byte, error) {
 	var value interface{}
 	var err error
 	var b byte
@@ -182,9 +182,6 @@ func genericMapTextDecoder(buf []byte, defaultCodec *Codec, codecFromKey map[str
 		}
 		switch b = buf[0]; b {
 		case '}':
-			if actual, expected := len(mapValues), lencodec; expected > 0 && actual != expected {
-				return nil, buf, fmt.Errorf("cannot decode Map: only found %d of %d fields", actual, expected)
-			}
 			return mapValues, buf[1:], nil
 		case ',':
 			buf = buf[1:]

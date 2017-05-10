@@ -33,7 +33,6 @@ func TestPrimitiveIntText(t *testing.T) {
 	testTextCodecPass(t, "int", -13, []byte("-13"))
 	testTextCodecPass(t, "int", 0, []byte("0"))
 	testTextCodecPass(t, "int", 13, []byte("13"))
-	testTextDecodeFail(t, "int", []byte("42a"), "unexpected byte")
 	testTextDecodePass(t, "int", -0, []byte("-0"))
 	testTextEncodePass(t, "int", -0, []byte("0")) // NOTE: -0 encodes as "0"
 }
@@ -72,7 +71,6 @@ func TestPrimitiveLongText(t *testing.T) {
 	testTextCodecPass(t, "long", -13, []byte("-13"))
 	testTextCodecPass(t, "long", 0, []byte("0"))
 	testTextCodecPass(t, "long", 13, []byte("13"))
-	testTextDecodeFail(t, "long", []byte("42a"), "unexpected byte")
 	testTextDecodePass(t, "long", -0, []byte("-0"))
 	testTextEncodePass(t, "long", -0, []byte("0")) // NOTE: -0 encodes as "0"
 }

@@ -32,7 +32,6 @@ func TestPrimitiveDoubleText(t *testing.T) {
 	testTextCodecPass(t, "double", math.Inf(-1), []byte("-1e999"))
 	testTextCodecPass(t, "double", math.Inf(1), []byte("1e999"))
 	testTextCodecPass(t, "double", math.NaN(), []byte("null"))
-	testTextDecodeFail(t, "double", []byte("42a"), "unexpected byte")
 	testTextDecodePass(t, "double", -0, []byte("-0"))
 	testTextEncodePass(t, "double", -0, []byte("0")) // NOTE: -0 encodes as "0"
 }
@@ -64,7 +63,6 @@ func TestPrimitiveFloatText(t *testing.T) {
 	testTextCodecPass(t, "float", math.Inf(-1), []byte("-1e999"))
 	testTextCodecPass(t, "float", math.Inf(1), []byte("1e999"))
 	testTextCodecPass(t, "float", math.NaN(), []byte("null"))
-	testTextDecodeFail(t, "float", []byte("42a"), "unexpected byte")
 	testTextDecodePass(t, "float", -0, []byte("-0"))
 	testTextEncodePass(t, "float", -0, []byte("0")) // NOTE: -0 encodes as "0"
 }

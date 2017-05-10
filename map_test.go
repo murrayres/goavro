@@ -114,7 +114,7 @@ func TestMapTextDecodeFail(t *testing.T) {
 
 func TestMapTextCodecPass(t *testing.T) {
 	schema := `{"type":"map","values":"string"}`
-	datum := map[string]interface{}{"key1": "⌘ ", "key2": "value2"}
-	testTextEncodePass(t, schema, datum, []byte(`{"key1":"\u0001\u2318 ","key2":"value2"}`))
-	testTextDecodePass(t, schema, datum, []byte(` { "key1" : "\u0001\u2318 " , "key2" : "value2" }`))
+	datum := map[string]interface{}{"key1": "⌘ "}
+	testTextEncodePass(t, schema, datum, []byte(`{"key1":"\u0001\u2318 "}`))
+	testTextDecodePass(t, schema, datum, []byte(` { "key1" : "\u0001\u2318 " }`))
 }

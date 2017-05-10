@@ -137,34 +137,34 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 			(math.IsInf(datumFloat, 1) != math.IsInf(decodedFloat, 1)) &&
 			(math.IsInf(datumFloat, -1) != math.IsInf(decodedFloat, -1)) &&
 			datumFloat != decodedFloat {
-			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, decodedFloat, datumFloat)
+			t.Errorf("numerical comparison: schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, decodedFloat, datumFloat)
 		}
 	} else if datumIsMap && decodedIsMap {
 		if actual, expected := len(decodedMap), len(datumMap); actual != expected {
-			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, actual, expected)
+			t.Fatalf("map comparison: length mismatch; Actual: %v; Expected: %v", actual, expected)
 		}
 		for key, datumValue := range datumMap {
 			decodedValue, ok := decodedMap[key]
 			if !ok {
-				t.Errorf("schema: %s; Datum: %v; Decoded Missing Key: %q", schema, datum, key)
+				t.Fatalf("map comparison: decoded missing key: %q: Actual: %v; Expected: %v", key, decodedMap, datumMap)
 			}
 			if actual, expected := fmt.Sprintf("%v", decodedValue), fmt.Sprintf("%v", datumValue); actual != expected {
-				t.Errorf("schema: %s; Datum: %v; Value for key %q Mismatch: Actual: %v; Expected: %v", schema, datum, key, actual, expected)
+				t.Errorf("map comparison: values differ for key: %q; Actual: %v; Expected: %v", key, actual, expected)
 			}
 		}
 	} else if datumIsSlice && decodedIsSlice {
 		if actual, expected := len(decodedMap), len(datumMap); actual != expected {
-			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, actual, expected)
+			t.Fatalf("slice comparison: length mismatch; Actual: %v; Expected: %v", actual, expected)
 		}
 		for i, datumValue := range datumSlice {
 			decodedValue := decodedSlice[i]
 			if actual, expected := fmt.Sprintf("%v", decodedValue), fmt.Sprintf("%v", datumValue); actual != expected {
-				t.Errorf("schema: %s; Datum: %v; Value for item %d Mismatch: Actual: %v; Expected: %v", schema, datum, i+1, actual, expected)
+				t.Errorf("slice comparison: values differ for index: %d: Actual: %v; Expected: %v", i+1, actual, expected)
 			}
 		}
 	} else if datumIsString && decodedIsString {
 		if actual, expected := decodedString, datumString; actual != expected {
-			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, actual, expected)
+			t.Errorf("string comparison: Actual: %v; Expected: %v", actual, expected)
 		}
 	} else if actual, expected := fmt.Sprintf("%v", decoded), fmt.Sprintf("%v", datum); actual != expected {
 		t.Errorf("schema: %s; Datum: %v; Actual: %s; Expected: %s", schema, datum, actual, expected)

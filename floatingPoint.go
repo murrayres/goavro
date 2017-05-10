@@ -226,10 +226,7 @@ func numberLength(buf []byte, floatAllowed bool) (int, error) {
 			}
 		}
 	}
-	// STATE 7: end; any more bytes is an error
-	if index < buflen {
-		return 0, fmt.Errorf("unexpected byte: %q", buf[index])
-	}
+	// STATE 7: end
 	return index, nil
 }
 
