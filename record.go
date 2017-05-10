@@ -97,37 +97,7 @@ func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap 
 	}
 
 	c.textEncoder = func(buf []byte, datum interface{}) ([]byte, error) {
-		valueMap, ok := datum.(map[string]interface{})
-		if !ok {
-			return buf, fmt.Errorf("Record %q value ought to be map[string]interface{}; received: %T", c.typeName, datum)
-		}
-
-		buf = append(buf, '{')
-		// records encoded in order fields were defined in schema
-		for i, fieldCodec := range codecFromIndex {
-			var err error
-			fieldName := nameFromIndex[i]
-
-			// NOTE: If field value was not specified in map, then attempt to encode the nil
-			fieldValue, ok := valueMap[fieldName]
-
-			buf, err = stringTextEncoder(buf, fieldName)
-			if err != nil {
-				return buf, err
-			}
-			buf = append(buf, ':')
-
-			buf, err = fieldCodec.textEncoder(buf, fieldValue)
-			if err != nil {
-				if !ok {
-					return buf, fmt.Errorf("Record %q field value for %q was not specified", c.typeName, fieldName)
-				}
-				// field was specified in datum; therefore its value was invalid
-				return buf, fmt.Errorf("Record %q field value for %q does not match its schema: %s", c.typeName, fieldName, err)
-			}
-			buf = append(buf, ',')
-		}
-		return append(buf[:len(buf)-1], '}'), nil
+		return genericMapTextEncoder(buf, datum, nil, codecFromFieldName) // defaultCodec == nil
 	}
 
 	return c, nil

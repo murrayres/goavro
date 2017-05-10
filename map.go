@@ -56,6 +56,9 @@ func makeMapCodec(st map[string]*Codec, namespace string, schemaMap map[string]i
 						return nil, buf, fmt.Errorf("cannot decode Map key: %s", err)
 					}
 					key := value.(string) // string decoder always returns a string
+					if _, ok := mapValues[key]; ok {
+						return nil, buf, fmt.Errorf("cannot decode Map: duplicate key: %q", key)
+					}
 					// then decode the value
 					if value, buf, err = valueCodec.decoder(buf); err != nil {
 						return nil, buf, fmt.Errorf("cannot decode Map value for key %q: %s", key, err)
@@ -119,6 +122,9 @@ func makeMapCodec(st map[string]*Codec, namespace string, schemaMap map[string]i
 		textDecoder: func(buf []byte) (interface{}, []byte, error) {
 			return genericMapTextDecoder(buf, valueCodec, nil)
 		},
+		textEncoder: func(buf []byte, datum interface{}) ([]byte, error) {
+			return genericMapTextEncoder(buf, datum, valueCodec, nil)
+		},
 	}, nil
 }
 
@@ -142,16 +148,20 @@ func genericMapTextDecoder(buf []byte, defaultCodec *Codec, codecFromKey map[str
 		// decode key string
 		value, buf, err = stringTextDecoder(buf)
 		if err != nil {
-			return nil, buf, fmt.Errorf("cannot read Map: expected key: %s", err)
+			return nil, buf, fmt.Errorf("cannot decode Map: expected key: %s", err)
 		}
 		key := value.(string)
+		// Is key already used?
+		if _, ok := mapValues[key]; ok {
+			return nil, buf, fmt.Errorf("cannot decode Map: duplicate key: %q", key)
+		}
 		// Find a codec for the key
 		fieldCodec := codecFromKey[key]
 		if fieldCodec == nil {
 			fieldCodec = defaultCodec
 		}
 		if fieldCodec == nil {
-			return nil, buf, fmt.Errorf("cannot read Map: cannot determine codec: %q", key)
+			return nil, buf, fmt.Errorf("cannot decode Map: cannot determine codec: %q", key)
 		}
 		// decode colon
 		if buf, err = gobble(buf, ':'); err != nil {
@@ -173,14 +183,51 @@ func genericMapTextDecoder(buf []byte, defaultCodec *Codec, codecFromKey map[str
 		switch b = buf[0]; b {
 		case '}':
 			if actual, expected := len(mapValues), lencodec; expected > 0 && actual != expected {
-				return nil, buf, fmt.Errorf("cannot read Map: only found %d of %d fields", actual, expected)
+				return nil, buf, fmt.Errorf("cannot decode Map: only found %d of %d fields", actual, expected)
 			}
 			return mapValues, buf[1:], nil
 		case ',':
 			buf = buf[1:]
 		default:
-			return nil, buf, fmt.Errorf("cannot read Map: expected ',' or '}'; received: %q", b)
+			return nil, buf, fmt.Errorf("cannot decode Map: expected ',' or '}'; received: %q", b)
 		}
 	}
 	return nil, buf, io.ErrShortBuffer
+}
+
+func genericMapTextEncoder(buf []byte, datum interface{}, defaultCodec *Codec, codecFromKey map[string]*Codec) ([]byte, error) {
+	valueMap, ok := datum.(map[string]interface{})
+	if !ok {
+		return buf, fmt.Errorf("Map ought to be map[string]interface{}; received: %T", datum)
+	}
+
+	var err error
+
+	buf = append(buf, '{')
+
+	for key, value := range valueMap {
+		// Find a codec for the key
+		fieldCodec := codecFromKey[key]
+		if fieldCodec == nil {
+			fieldCodec = defaultCodec
+		}
+		if fieldCodec == nil {
+			return buf, fmt.Errorf("cannot encode Map: cannot determine codec: %q", key)
+		}
+		// Encode key string
+		buf, err = stringTextEncoder(buf, key)
+		if err != nil {
+			return buf, err
+		}
+		buf = append(buf, ':')
+		// Encode value
+		buf, err = fieldCodec.textEncoder(buf, value)
+		if err != nil {
+			// field was specified in datum; therefore its value was invalid
+			return buf, fmt.Errorf("Map value for %q does not match its schema: %s", key, err)
+		}
+		buf = append(buf, ',')
+	}
+
+	return append(buf[:len(buf)-1], '}'), nil
 }
