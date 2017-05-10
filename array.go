@@ -2,6 +2,7 @@ package goavro
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 )
 
@@ -123,6 +124,65 @@ func makeArrayCodec(st map[string]*Codec, enclosingNamespace string, schemaMap m
 			}
 
 			return longEncoder(buf, 0) // append trailing 0 block count to signal end of Array
+		},
+		textDecoder: func(buf []byte) (interface{}, []byte, error) {
+			var value interface{}
+			var err error
+			var b byte
+
+			if buf, err = gobble(buf, '['); err != nil {
+				return nil, buf, err
+			}
+
+			var arrayValues []interface{}
+
+			// NOTE: Also terminates when read ']' byte.
+			for len(buf) > 0 {
+				// decode value
+				if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
+					return nil, buf, io.ErrShortBuffer
+				}
+				value, buf, err = itemCodec.textDecoder(buf)
+				if err != nil {
+					return nil, buf, err
+				}
+				arrayValues = append(arrayValues, value)
+				// either comma or closing curly brace
+				if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
+					return nil, buf, io.ErrShortBuffer
+				}
+				switch b = buf[0]; b {
+				case ']':
+					return arrayValues, buf[1:], nil
+				case ',':
+					buf = buf[1:]
+				default:
+					return nil, buf, fmt.Errorf("cannot decode Array: expected ',' or ']'; received: %q", b)
+				}
+			}
+			return nil, buf, io.ErrShortBuffer
+		},
+		textEncoder: func(buf []byte, datum interface{}) ([]byte, error) {
+			arrayValues, ok := datum.([]interface{})
+			if !ok {
+				return buf, fmt.Errorf("Array ought to be []interface{}; received: %T", datum)
+			}
+
+			var err error
+
+			buf = append(buf, '[')
+
+			for i, item := range arrayValues {
+				// Encode value
+				buf, err = itemCodec.textEncoder(buf, item)
+				if err != nil {
+					// field was specified in datum; therefore its value was invalid
+					return buf, fmt.Errorf("cannot encode Array item %d; %v: %s", i+1, item, err)
+				}
+				buf = append(buf, ',')
+			}
+
+			return append(buf[:len(buf)-1], ']'), nil
 		},
 	}, nil
 }

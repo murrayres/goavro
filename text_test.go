@@ -66,9 +66,10 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 		t.Errorf("schema: %s; Datum: %#v; Actual: %v; Expected: %v", schema, datum, actual, expected)
 	}
 
-	var datumIsMap, datumIsNumerical, datumIsString bool
+	var datumIsMap, datumIsNumerical, datumIsSlice, datumIsString bool
 	var datumFloat float64
 	var datumMap map[string]interface{}
+	var datumSlice []interface{}
 	var datumString string
 	switch v := datum.(type) {
 	case float64:
@@ -89,14 +90,18 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 	case string:
 		datumString = v
 		datumIsString = true
+	case []interface{}:
+		datumIsSlice = true
+		datumSlice = v
 	case map[string]interface{}:
 		datumIsMap = true
 		datumMap = v
 	}
 
-	var decodedIsMap, decodedIsNumerical, decodedIsString bool
+	var decodedIsMap, decodedIsNumerical, decodedIsSlice, decodedIsString bool
 	var decodedMap map[string]interface{}
 	var decodedFloat float64
+	var decodedSlice []interface{}
 	var decodedString string
 	switch v := decoded.(type) {
 	case float64:
@@ -117,6 +122,9 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 	case string:
 		decodedString = v
 		decodedIsString = true
+	case []interface{}:
+		decodedIsSlice = true
+		decodedSlice = v
 	case map[string]interface{}:
 		decodedIsMap = true
 		decodedMap = v
@@ -142,6 +150,16 @@ func testTextDecodePass(t *testing.T, schema string, datum interface{}, encoded 
 			}
 			if actual, expected := fmt.Sprintf("%v", decodedValue), fmt.Sprintf("%v", datumValue); actual != expected {
 				t.Errorf("schema: %s; Datum: %v; Value for key %q Mismatch: Actual: %v; Expected: %v", schema, datum, key, actual, expected)
+			}
+		}
+	} else if datumIsSlice && decodedIsSlice {
+		if actual, expected := len(decodedMap), len(datumMap); actual != expected {
+			t.Errorf("schema: %s; Datum: %v; Actual: %v; Expected: %v", schema, datum, actual, expected)
+		}
+		for i, datumValue := range datumSlice {
+			decodedValue := decodedSlice[i]
+			if actual, expected := fmt.Sprintf("%v", decodedValue), fmt.Sprintf("%v", datumValue); actual != expected {
+				t.Errorf("schema: %s; Datum: %v; Value for item %d Mismatch: Actual: %v; Expected: %v", schema, datum, i+1, actual, expected)
 			}
 		}
 	} else if datumIsString && decodedIsString {

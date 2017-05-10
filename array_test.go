@@ -93,3 +93,21 @@ func TestArrayEncodeErrorFIXME(t *testing.T) {
 		testBinaryCodecPass(t, `{"type":"array","items":"int"}`, []string{}, []byte{0})
 	}
 }
+
+func TestArrayTextDecodeFail(t *testing.T) {
+	schema := `{"type":"array","items":"string"}`
+	testTextDecodeFail(t, schema, []byte(`   "v1"  ,  "v2"  ]  `), "expected: '['")
+	testTextDecodeFail(t, schema, []byte(` [  13  ,  "v2"  ]  `), "expected initial \"")
+	testTextDecodeFail(t, schema, []byte(` [  "v1  ,  "v2"  ]  `), "expected ',' or ']'")
+	testTextDecodeFail(t, schema, []byte(` [  "v1"    "v2"  ]  `), "expected ',' or ']'")
+	testTextDecodeFail(t, schema, []byte(` [  "v1"  ,  13  ]  `), "expected initial \"")
+	testTextDecodeFail(t, schema, []byte(` [  "v1"  ,  "v2  ]  `), "expected final \"")
+	testTextDecodeFail(t, schema, []byte(` [  "v1"  ,  "v2"    `), "short buffer")
+}
+
+func TestArrayTextCodecPass(t *testing.T) {
+	schema := `{"type":"array","items":"string"}`
+	datum := []interface{}{"⌘ ", "value2"}
+	testTextEncodePass(t, schema, datum, []byte(`["\u0001\u2318 ","value2"]`))
+	testTextDecodePass(t, schema, datum, []byte(` [ "\u0001\u2318 " , "value2" ]`))
+}

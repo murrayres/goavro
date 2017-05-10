@@ -106,6 +106,7 @@ func TestMapTextDecodeFail(t *testing.T) {
 	testTextDecodeFail(t, schema, []byte(`  {  "string"  ,  "silly"  ,   "bytes"  : "silly" } `), "expected: ':'")
 	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  13  ,   "bytes"  : "silly" } `), "expected initial \"")
 	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly" :   "bytes"  : "silly" } `), "expected ',' or '}'")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly"    "bytes"  : "silly" } `), "expected ',' or '}'")
 	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly" ,   "bytes"  : "silly"  `), "short buffer")
 	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly"  `), "short buffer")
 	testTextDecodeFail(t, schema, []byte(`{"key1":"\u0001\u2318 ","key1":"value2"}`), "duplicate key")
