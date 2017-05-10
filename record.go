@@ -2,7 +2,6 @@ package goavro
 
 import (
 	"fmt"
-	"io"
 )
 
 func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap map[string]interface{}) (*Codec, error) {
@@ -94,61 +93,7 @@ func makeRecordCodec(st map[string]*Codec, enclosingNamespace string, schemaMap 
 	}
 
 	c.textDecoder = func(buf []byte) (interface{}, []byte, error) {
-		var value interface{}
-		var err error
-		var b byte
-
-		if buf, err = gobble(buf, '{'); err != nil {
-			return nil, buf, err
-		}
-
-		recordMap := make(map[string]interface{}, len(codecFromIndex))
-
-		// NOTE: Also terminates when read '}' byte.
-		for len(buf) > 0 {
-			if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
-				return nil, buf, io.ErrShortBuffer
-			}
-			// decode key string
-			value, buf, err = stringTextDecoder(buf)
-			if err != nil {
-				return nil, buf, fmt.Errorf("cannot read Record: expected key: %s", err)
-			}
-			key := value.(string)
-			fieldCodec, ok := codecFromFieldName[key]
-			if !ok {
-				return nil, buf, fmt.Errorf("cannot read Record: invalid record field name: %q", key)
-			}
-			// decode colon
-			if buf, err = gobble(buf, ':'); err != nil {
-				return nil, buf, err
-			}
-			// decode value
-			if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
-				return nil, buf, io.ErrShortBuffer
-			}
-			value, buf, err = fieldCodec.textDecoder(buf)
-			if err != nil {
-				return nil, buf, err
-			}
-			recordMap[key] = value
-			// either comma or closing curly brace
-			if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
-				return nil, buf, io.ErrShortBuffer
-			}
-			switch b = buf[0]; b {
-			case '}':
-				if actual, expected := len(recordMap), len(codecFromIndex); actual != expected {
-					return nil, buf, fmt.Errorf("cannot read Record: only found %d of %d fields", actual, expected)
-				}
-				return recordMap, buf[1:], nil
-			case ',':
-				buf = buf[1:]
-			default:
-				return nil, buf, fmt.Errorf("cannot read Record: expected ',' or '}'; received: %q", b)
-			}
-		}
-		return nil, buf, io.ErrShortBuffer
+		return genericMapTextDecoder(buf, nil, codecFromFieldName) // defaultCodec == nil
 	}
 
 	c.textEncoder = func(buf []byte, datum interface{}) ([]byte, error) {

@@ -3,6 +3,7 @@ package goavro
 import (
 	"errors"
 	"fmt"
+	"io"
 )
 
 func makeMapCodec(st map[string]*Codec, namespace string, schemaMap map[string]interface{}) (*Codec, error) {
@@ -115,5 +116,71 @@ func makeMapCodec(st map[string]*Codec, namespace string, schemaMap map[string]i
 			}
 			return longEncoder(buf, 0) // append tailing 0 block count to signal end of Map
 		},
+		textDecoder: func(buf []byte) (interface{}, []byte, error) {
+			return genericMapTextDecoder(buf, valueCodec, nil)
+		},
 	}, nil
+}
+
+func genericMapTextDecoder(buf []byte, defaultCodec *Codec, codecFromKey map[string]*Codec) (interface{}, []byte, error) {
+	var value interface{}
+	var err error
+	var b byte
+
+	if buf, err = gobble(buf, '{'); err != nil {
+		return nil, buf, err
+	}
+
+	lencodec := len(codecFromKey)
+	mapValues := make(map[string]interface{}, lencodec)
+
+	// NOTE: Also terminates when read '}' byte.
+	for len(buf) > 0 {
+		if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
+			return nil, buf, io.ErrShortBuffer
+		}
+		// decode key string
+		value, buf, err = stringTextDecoder(buf)
+		if err != nil {
+			return nil, buf, fmt.Errorf("cannot read Map: expected key: %s", err)
+		}
+		key := value.(string)
+		// Find a codec for the key
+		fieldCodec := codecFromKey[key]
+		if fieldCodec == nil {
+			fieldCodec = defaultCodec
+		}
+		if fieldCodec == nil {
+			return nil, buf, fmt.Errorf("cannot read Map: cannot determine codec: %q", key)
+		}
+		// decode colon
+		if buf, err = gobble(buf, ':'); err != nil {
+			return nil, buf, err
+		}
+		// decode value
+		if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
+			return nil, buf, io.ErrShortBuffer
+		}
+		value, buf, err = fieldCodec.textDecoder(buf)
+		if err != nil {
+			return nil, buf, err
+		}
+		mapValues[key] = value
+		// either comma or closing curly brace
+		if buf, _ = advanceToNonWhitespace(buf); len(buf) == 0 {
+			return nil, buf, io.ErrShortBuffer
+		}
+		switch b = buf[0]; b {
+		case '}':
+			if actual, expected := len(mapValues), lencodec; expected > 0 && actual != expected {
+				return nil, buf, fmt.Errorf("cannot read Map: only found %d of %d fields", actual, expected)
+			}
+			return mapValues, buf[1:], nil
+		case ',':
+			buf = buf[1:]
+		default:
+			return nil, buf, fmt.Errorf("cannot read Map: expected ',' or '}'; received: %q", b)
+		}
+	}
+	return nil, buf, io.ErrShortBuffer
 }

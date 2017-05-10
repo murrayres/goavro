@@ -98,3 +98,22 @@ func TestMap(t *testing.T) {
 	testBinaryCodecPass(t, `{"type":"map","values":"null"}`, map[string]interface{}{"ab": nil}, []byte("\x02\x04ab\x00"))
 	testBinaryCodecPass(t, `{"type":"map","values":"boolean"}`, map[string]interface{}{"ab": true}, []byte("\x02\x04ab\x01\x00"))
 }
+
+func TestMapTextDecodeFail(t *testing.T) {
+	schema := `{"type":"map","values":"string"}`
+	testTextDecodeFail(t, schema, []byte(`    "string"  :  "silly"  ,   "bytes"  : "silly" } `), "expected: '{'")
+	testTextDecodeFail(t, schema, []byte(`  {  16  :  "silly"  ,   "bytes"  : "silly" } `), "expected initial \"")
+	testTextDecodeFail(t, schema, []byte(`  {  "badName"  :  "silly"  ,   "bytes"  : "silly" } `), "invalid record field name")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  ,  "silly"  ,   "bytes"  : "silly" } `), "expected: ':'")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  13  ,   "bytes"  : "silly" } `), "expected initial \"")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly" :   "bytes"  : "silly" } `), "expected ',' or '}'")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly" ,   "bytes"  : "silly"  `), "short buffer")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly"  `), "short buffer")
+	testTextDecodeFail(t, schema, []byte(`  {  "string"  :  "silly" } `), "only found 1 of 2 fields")
+}
+
+func TestMapTextCodecPass(t *testing.T) {
+	datum := map[string]interface{}{"key1": "⌘ ", "key2": "value2"}
+	testTextEncodePass(t, `{"type":"map","values":"string"}`, datum, []byte(`{"key1":"\u0001\u2318 ","key2":"value2"}`))
+	testTextDecodePass(t, `{"type":"map","values":"string"}`, datum, []byte(` { "key1" : "\u0001\u2318 " , "key2" : "value2" }`))
+}
